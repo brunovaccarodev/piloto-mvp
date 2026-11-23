@@ -3,24 +3,20 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Climatic Registry for Enterprises</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600&display=swap" rel="stylesheet">
+<title>Climatic Registry for Enterprises · Piloto gratuito</title>
+<meta name="description" content="Registro climático por ubicación, con fecha y hora, para empresas del agro, la industria y la logística. Piloto gratuito de 14 días.">
+<meta property="og:title" content="Climatic Registry for Enterprises · Piloto gratuito">
+<meta property="og:description" content="Registrá el clima de tu campo o planta con fecha y hora y recibí un reporte. Piloto gratuito de 14 días.">
+<meta name="theme-color" content="#ffffff">
 <script src="https://cdn.tailwindcss.com/3.4.17"></script>
 <script>
-tailwind.config={theme:{extend:{fontFamily:{serif:['"Source Serif 4"','Georgia','"Times New Roman"','serif']}}}};
+tailwind.config={theme:{extend:{fontFamily:{serif:['"Times New Roman"','Times','Georgia','serif']}}}};
 </script>
 <style>
 :root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
 html,body{background:#FFFFFF;min-height:100%}
-body{font-family:"Source Serif 4",Georgia,"Times New Roman",serif;color:#111;-webkit-font-smoothing:antialiased}
-button:focus-visible,input:focus-visible{outline:2px solid #111;outline-offset:2px}
-.hero{background:radial-gradient(120% 140% at 0% 0%,#FBEBE2 0%,rgba(251,235,226,0) 55%),radial-gradient(90% 120% at 100% 100%,#EEF3EF 0%,rgba(238,243,239,0) 60%),#FFFEFC}
-@keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-.rise{animation:rise .45s ease both}
-@keyframes spin{to{transform:rotate(360deg)}}
-.spin{animation:spin 1s linear infinite}
-@media (prefers-reduced-motion:reduce){.rise,.spin{animation:none}}
+body{font-family:"Times New Roman",Times,Georgia,serif;color:#111;-webkit-font-smoothing:antialiased}
+button:focus-visible,input:focus-visible,a:focus-visible{outline:2px solid #111;outline-offset:2px}
 </style>
 </head>
 <body>
@@ -28,165 +24,141 @@ button:focus-visible,input:focus-visible{outline:2px solid #111;outline-offset:2
 <script src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/htm@3.1.1/dist/htm.umd.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/lucide-react@0.383.0/dist/umd/lucide-react.min.js"></script>
 <script>
-const {useState,useMemo}=React;
+const {useState}=React;
 const html=htm.bind(React.createElement);
-const I=(n)=>(window.LucideReact&&window.LucideReact[n])||(()=>null);
-const MapPin=I('MapPin'),Thermometer=I('Thermometer'),Gauge=I('Gauge'),Droplets=I('Droplets'),Wind=I('Wind'),CloudRain=I('CloudRain'),UpDown=I('ArrowUpDown'),Loader=I('LoaderCircle'),Clock=I('Clock'),Database=I('Database'),Hash=I('Hash'),Sigma=I('Sigma');
 
+/* ---------- Configuración del piloto ---------- */
+const WA_NUMBER='5491130107055';
+const JOIN_TEXT='Hola, quiero sumarme al piloto de 14 días de Climatic Registry for Enterprises.';
+const SHARE_TEXT='Climatic Registry for Enterprises: registro climático por ubicación, con fecha y hora. Piloto gratuito de 14 días.';
+const share=()=>{const url=location.href;
+  if(navigator.share){navigator.share({title:'Climatic Registry for Enterprises',text:SHARE_TEXT,url}).catch(()=>{})}
+  else{window.open('https://wa.me/?text='+encodeURIComponent(SHARE_TEXT+' '+url),'_blank','noopener')}};
+
+/* ---------- Formato ---------- */
 const nf=(n,d=1)=>n.toLocaleString('es-AR',{minimumFractionDigits:d,maximumFractionDigits:d});
 const pad=(n)=>String(n).padStart(2,'0');
 const stamp=(d)=>pad(d.getDate())+'/'+pad(d.getMonth()+1)+'/'+d.getFullYear()+', '+pad(d.getHours())+':'+pad(d.getMinutes());
-
-const CITIES={
-  'bragado':{desc:'cielo claro',temp:25.3,hum:34,rain:0,wind:5.5,pres:1020,sky:'sun'},
-  'buenos aires':{desc:'cielo claro',temp:24.3,hum:39,rain:0,wind:0.9,pres:1018,sky:'sun'},
-  'mar del plata':{desc:'nubes dispersas',temp:17.8,hum:72,rain:0,wind:7.2,pres:1014,sky:'cloud'}
-};
-const FALLBACK={desc:'cielo despejado',temp:21.4,hum:52,rain:0,wind:3.6,pres:1016,sky:'sun'};
 const titleCase=(s)=>s.trim().replace(/\s+/g,' ').split(' ').map(w=>w.charAt(0).toUpperCase()+w.slice(1).toLowerCase()).join(' ');
-const makeResult=(city,saved)=>{const b=CITIES[city.trim().toLowerCase()]||FALLBACK;const t=b.temp;
-  return {name:titleCase(city)+', AR',desc:b.desc,temp:t,feels:t-(b.wind>6?1.2:0),min:t-(b.sky==='cloud'?1.1:0),max:t+(b.sky==='cloud'?1.6:0),pres:b.pres,hum:b.hum,wind:b.wind,rain:b.rain,sky:b.sky,saved}};
 
+/* ---------- Capa de datos (demostración) ----------
+   En tu app real, reemplazá api.consultar por una llamada a tu backend, por ejemplo:
+   const r = await fetch('/api/clima?ciudad='+encodeURIComponent(city)); return r.json();
+   (el backend consulta OpenWeatherMap, guarda en PostgreSQL y devuelve el registro). */
+const DEMO={
+  'buenos aires':{desc:'cielo claro',temp:24.8,feels:25,min:24,max:26,pres:1018,hum:37,rain:0,wind:1.4}
+};
+const api={consultar:(city)=>new Promise(res=>setTimeout(()=>{
+  const b=DEMO[city.trim().toLowerCase()];
+  res(b?{...b,name:titleCase(city)+', AR',saved:stamp(new Date())}:null)},800))};
+const INIT_RES={...DEMO['buenos aires'],name:'Buenos Aires, AR',saved:'09/11/2026, 15:07'};
 const INIT_HIST=[
-  {id:2,date:'09/11/2026, 15:07',loc:'Bragado, AR',temp:25.3,hum:34,rain:0,wind:5.5},
+  {id:2,date:'09/11/2026, 15:07',loc:'Buenos Aires, AR',temp:24.8,hum:37,rain:0,wind:1.4},
   {id:1,date:'09/11/2026, 14:45',loc:'Buenos Aires, AR',temp:24.3,hum:39,rain:0,wind:0.9}
 ];
 
-const Card=({children,className=''})=>html`<section className=${'bg-white border border-[#E5E5E3] rounded-3xl p-5 sm:p-6 '+className}>${children}</section>`;
-const CardHead=({title,sub,right})=>html`<div className="flex items-start justify-between gap-4"><div><h2 className="text-[21px] font-medium leading-tight">${title}</h2><p className="text-[15px] text-[#71717A] mt-1.5">${sub}</p></div>${right||null}</div>`;
+/* ---------- Piezas ---------- */
+const Card=({children})=>html`<section className="bg-white border border-[#E5E5E5] rounded-3xl p-5 sm:p-6">${children}</section>`;
+const Head=({title,sub,right})=>html`<div className="flex items-start justify-between gap-4"><div><h2 className="text-[21px] leading-tight">${title}</h2><p className="text-[16px] text-[#6B6B6B] mt-1.5">${sub}</p></div>${right||null}</div>`;
+const JoinBtn=({light,rubro})=>WA_NUMBER?html`<a href=${'https://wa.me/'+WA_NUMBER+'?text='+encodeURIComponent(JOIN_TEXT+(rubro?' Mi rubro: '+rubro+'.':''))} target="_blank" rel="noopener" className=${'inline-flex items-center justify-center h-11 px-5 rounded-xl text-[16px] '+(light?'bg-white text-[#111] active:bg-[#EEE]':'bg-[#1A1A1A] text-white active:bg-[#333]')}>Sumarme al piloto</a>`:null;
+const ShareBtn=({light})=>html`<button type="button" onClick=${share} className=${'inline-flex items-center justify-center h-11 px-5 rounded-xl text-[16px] border '+(light?'border-white/35 text-white active:bg-white/10':'border-[#D4D4D0] text-[#111] active:bg-[#F4F4F2]')}>Compartir</button>`;
 
-function SkyIcon({kind}){
-  return html`<div className="relative shrink-0 w-[76px] h-[76px] rounded-full grid place-items-center" style=${{background:'radial-gradient(circle at 35% 30%,#FFF3EA,#F8DACB)',boxShadow:'0 0 0 6px rgba(217,113,78,0.10)'}}>
-    ${kind==='sun'?html`<svg width="46" height="46" viewBox="0 0 48 48" aria-hidden="true">
-      <g stroke="#D9714E" strokeWidth="2.6" strokeLinecap="round">${[0,45,90,135,180,225,270,315].map(a=>html`<line key=${a} x1="24" y1="4.5" x2="24" y2="9.5" transform=${'rotate('+a+' 24 24)'}/>`)}</g>
-      <circle cx="24" cy="24" r="10.5" fill="#D9714E"/></svg>`
-    :html`<svg width="50" height="50" viewBox="0 0 48 48" aria-hidden="true">
-      <circle cx="31" cy="16" r="7.5" fill="#E9A07E"/>
-      <path d="M14 36a7 7 0 0 1 .8-13.9A9 9 0 0 1 32 24a6 6 0 0 1 1 12H14z" fill="#fff" stroke="#B9B6B0" strokeWidth="2" strokeLinejoin="round"/></svg>`}
-  </div>`;
-}
-const Tile=({icon:Ic,label,children})=>html`<div className="border border-[#ECEAE6] bg-white/80 rounded-2xl px-3.5 py-3">
-  <div className="flex items-center gap-1.5 text-[13px] text-[#71717A]"><${Ic} size=${14} strokeWidth=${1.6}/>${label}</div>
-  <div className="text-[18px] mt-1 leading-tight">${children}</div>
-</div>`;
-function Range({min,max}){
-  const lo=-5,hi=40,a=Math.max(0,(min-lo)/(hi-lo)*100),b=Math.min(100,(max-lo)/(hi-lo)*100);
-  return html`<div className="relative h-1.5 rounded-full bg-[#ECEAE6] mt-2"><div className="absolute h-1.5 rounded-full" style=${{left:a+'%',width:Math.max(b-a,3)+'%',background:'linear-gradient(90deg,#E9A07E,#D9714E)'}}></div></div>`;
+const RUBROS={Agro:{bg:'#CFE6D8',fg:'#24493A'},Industria:{bg:'#F2DDB0',fg:'#6B4A0E'},'Logística':{bg:'#CFDDE9',fg:'#2F4C63'}};
+function Banner(){
+  const [rubro,setRubro]=useState(null);
+  return html`<section className="rounded-3xl bg-[#1A1A1A] text-white p-5 sm:p-6">
+    <div className="flex flex-wrap items-center justify-between gap-5">
+      <div className="max-w-[560px]">
+        <span className="text-[13px] tracking-[0.12em] uppercase text-[#D4D1CB]">Piloto gratuito · 14 días</span>
+        <h2 className="text-[26px] sm:text-[28px] leading-tight mt-1.5">Registrá el clima de tu campo o planta</h2>
+        <p className="text-[16.5px] text-[#D4D4D8] mt-2">Guardamos las condiciones de tu ubicación con fecha y hora y te enviamos un reporte al final.</p>
+        <div className="flex flex-wrap items-center gap-2 mt-3"><span className="text-[13.5px] text-[#A1A1AA] mr-1">Elegí tu rubro</span>${Object.keys(RUBROS).map(t=>{const c=RUBROS[t];const on=rubro===t;return html`<button key=${t} type="button" aria-pressed=${on} onClick=${()=>setRubro(on?null:t)} className="text-[14.5px] px-3 py-1 rounded-full border transition-colors" style=${on?{background:c.bg,color:c.fg,borderColor:c.bg,fontWeight:700}:{background:'transparent',color:c.bg,borderColor:c.bg+'66'}}>${t}</button>`})}</div>
+      </div>
+      <div className="flex flex-wrap gap-2.5"><${JoinBtn} light=${true} rubro=${rubro}/><${ShareBtn} light=${true}/></div>
+    </div>
+  </section>`;
 }
 
 function Consulta({onSaved}){
-  const [q,setQ]=useState('Mar del Plata');
+  const [q,setQ]=useState('Buenos Aires');
   const [busy,setBusy]=useState(false);
-  const [res,setRes]=useState(makeResult('Bragado','09/11/2026, 15:07'));
+  const [res,setRes]=useState(INIT_RES);
+  const [unknown,setUnknown]=useState(null);
   const [note,setNote]=useState('Última consulta guardada en este equipo, del 09/11/2026, 15:07. Consultá de nuevo para actualizarla.');
-  const run=(city)=>{const c=(city||q).trim();if(!c||busy)return;setBusy(true);
-    setTimeout(()=>{const s=stamp(new Date());const r=makeResult(c,s);setRes(r);setNote('Consulta guardada en el histórico el '+s+'. Consultá de nuevo para actualizarla.');onSaved(r);setBusy(false)},850)};
+  const run=async()=>{const c=q.trim();if(!c||busy)return;setBusy(true);
+    const r=await api.consultar(c);
+    if(!r){setUnknown(titleCase(c));setNote('Esta ubicación todavía no está en la demostración.')}
+    else{setUnknown(null);setRes(r);setNote('Última consulta guardada en este equipo, del '+r.saved+'. Consultá de nuevo para actualizarla.');onSaved(r)}
+    setBusy(false)};
   return html`<${Card}>
-    <${CardHead} title="Consultar clima" sub="Cada consulta queda registrada en el histórico."/>
+    <${Head} title="Consultar clima" sub="Cada consulta queda registrada en el histórico." right=${html`<span className="text-[13.5px] text-[#6B6B6B] border border-[#E5E5E5] rounded-full px-2.5 py-0.5 shrink-0">Datos de ejemplo</span>`}/>
     <div className="flex gap-2.5 mt-5">
-      <div className="relative flex-1 min-w-0">
-        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#A1A1AA]"><${MapPin} size=${16}/></span>
-        <input aria-label="Ciudad" value=${q} onChange=${e=>setQ(e.target.value)} onKeyDown=${e=>e.key==='Enter'&&run()} className="w-full h-12 pl-10 pr-3 rounded-xl border border-[#E5E5E3] bg-white text-[16px]"/>
-      </div>
-      <button type="button" onClick=${()=>run()} className="h-12 px-5 rounded-xl bg-[#111] text-white text-[16px] flex items-center gap-2 active:bg-[#333] shrink-0">${busy?html`<${Loader} size=${16} className="spin"/>`:null}${busy?'Consultando':'Consultar'}</button>
+      <input aria-label="Ciudad" value=${q} onChange=${e=>setQ(e.target.value)} onKeyDown=${e=>e.key==='Enter'&&run()} className="flex-1 min-w-0 h-12 px-4 rounded-xl border border-[#E5E5E5] bg-white text-[17px]"/>
+      <button type="button" onClick=${run} className="h-12 px-5 rounded-xl bg-[#1A1A1A] text-white text-[17px] shrink-0 active:bg-[#333]">${busy?'Consultando…':'Consultar'}</button>
     </div>
-    <div className="flex flex-wrap gap-2 mt-3">
-      ${['Bragado','Buenos Aires','Mar del Plata'].map(c=>html`<button key=${c} type="button" onClick=${()=>{setQ(c);run(c)}} className="text-[13.5px] px-3 py-1 rounded-full border border-[#E5E5E3] text-[#52525B] hover:border-[#111]">${c}</button>`)}
-    </div>
-    <p className="text-[14.5px] text-[#71717A] mt-5">${note}</p>
-
-    <div key=${res.name+res.saved} className=${'hero rise rounded-2xl border border-[#EFE9E4] mt-4 p-4 sm:p-5 '+(busy?'opacity-60':'')}>
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-3">
-        <${SkyIcon} kind=${res.sky}/>
-        <div className="min-w-[130px]">
-          <div className="text-[22px] leading-tight">${res.name}</div>
-          <div className="text-[15px] text-[#71717A]">${res.desc}</div>
-        </div>
-        <div className="text-[64px] sm:text-[72px] leading-none tracking-tight">${Math.round(res.temp)}<span className="text-[34px] sm:text-[38px] align-top text-[#52525B]"> °C</span></div>
-        <span className="inline-flex items-center gap-1.5 text-[13px] px-3 py-1 rounded-full border border-[#D8E5DD] bg-[#EEF4F0] text-[#3F6B57] sm:ml-auto"><${Database} size=${13}/>Guardado el ${res.saved}</span>
+    <p aria-live="polite" className="text-[15.5px] text-[#6B6B6B] mt-5">${note}</p>
+    ${unknown?html`<div className="mt-5 rounded-2xl border border-[#E5E5E5] p-5">
+      <div className="text-[20px] leading-tight">${unknown} todavía no está en la demostración</div>
+      <p className="text-[16px] text-[#6B6B6B] mt-2 max-w-[560px]">La demostración muestra Buenos Aires. En el piloto registramos el clima de tu ubicación durante 14 días y te enviamos un reporte.</p>
+      <div className="flex flex-wrap gap-2.5 mt-4"><${JoinBtn}/><${ShareBtn}/></div>
+    </div>`:html`<div className="mt-6 flex flex-wrap items-center gap-x-8 gap-y-5 px-1">
+      <div className="flex items-center gap-4">
+        <span className="w-11 h-11 rounded-full bg-[#DD7452] shrink-0"></span>
+        <div><div className="text-[23px] leading-tight">${res.name}</div><div className="text-[16px] text-[#6B6B6B]">${res.desc}</div></div>
       </div>
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5 mt-5">
-        <${Tile} icon=${Thermometer} label="Sensación térmica">${Math.round(res.feels)} °C<//>
-        <${Tile} icon=${UpDown} label="Mínima / Máxima">${Math.round(res.min)} °C / ${Math.round(res.max)} °C<${Range} min=${res.min} max=${res.max}/><//>
-        <${Tile} icon=${Gauge} label="Presión">${res.pres.toLocaleString('es-AR')} hPa<//>
-        <${Tile} icon=${Droplets} label="Humedad">${res.hum} %<div className="h-1.5 rounded-full bg-[#ECEAE6] mt-2"><div className="h-1.5 rounded-full bg-[#7FA3A0]" style=${{width:res.hum+'%'}}></div></div><//>
-        <${Tile} icon=${Wind} label="Viento">${nf(res.wind,1)} m/s<//>
-        <${Tile} icon=${CloudRain} label="Precipitación">${nf(res.rain,1)} mm<//>
-      </div>
-    </div>
+      <div className="text-[64px] leading-none">${Math.round(res.temp)} °C</div>
+      <dl className="grid grid-cols-[auto_auto] gap-x-7 gap-y-1.5 text-[17px]">
+        <dt className="text-[#6B6B6B]">Sensación térmica</dt><dd>${Math.round(res.feels)} °C</dd>
+        <dt className="text-[#6B6B6B]">Mínima / Máxima</dt><dd>${Math.round(res.min)} °C / ${Math.round(res.max)} °C</dd>
+        <dt className="text-[#6B6B6B]">Presión</dt><dd>${res.pres.toLocaleString('es-AR')} hPa</dd>
+      </dl>
+      <span className="border border-[#E5E5E5] rounded-full px-3 py-1 text-[14.5px]">Guardado el ${res.saved}</span>
+    </div>`}
   <//>`;
 }
 
-const tempTone=(t)=>t<15?'bg-[#E9EFF3] text-[#456176]':t<22?'bg-[#EEF4F0] text-[#3F6B57]':'bg-[#FBEDE6] text-[#B4552F]';
-function Bars({rows}){
-  const d=[...rows].reverse().slice(-8);
-  return html`<div className="flex items-end gap-1.5 h-[54px]" aria-label="Temperatura por medición">
-    ${d.map(r=>html`<div key=${r.id} title=${r.loc+' · '+nf(r.temp,1)+' °C'} className="w-5 rounded-t-md" style=${{height:Math.max(8,r.temp/40*54)+'px',background:r.temp<15?'#B7C7D3':r.temp<22?'#9DBBAA':'#E39A7B'}}></div>`)}
-  </div>`;
-}
 function Historico({rows}){
   const avg=rows.reduce((a,r)=>a+r.temp,0)/rows.length;
-  const max=rows.reduce((a,r)=>r.temp>a.temp?r:a,rows[0]);
+  const th='font-normal py-3 ';
   return html`<${Card}>
-    <div className="flex flex-wrap items-end justify-between gap-4">
-      <${CardHead} title="Histórico de mediciones" sub=${rows.length+' mediciones · temperatura promedio '+nf(avg,1)+' °C'}/>
-      <${Bars} rows=${rows}/>
-    </div>
-    <div className="grid grid-cols-3 gap-2.5 mt-5">
-      <${Tile} icon=${Hash} label="Mediciones">${rows.length}<//>
-      <${Tile} icon=${Sigma} label="Promedio">${nf(avg,1)} °C<//>
-      <${Tile} icon=${Thermometer} label="Máxima">${nf(max.temp,1)} °C<//>
-    </div>
-    <div className="overflow-x-auto mt-5 -mx-1 px-1">
-      <table className="w-full min-w-[640px] text-[15.5px]">
-        <thead><tr className="text-left text-[#52525B] border-b border-[#E5E5E3]">
-          ${['ID','Fecha','Ubicación'].map(h=>html`<th key=${h} className="font-normal py-3 pr-4">${h}</th>`)}
-          ${['Temp.','Humedad','Precip.','Viento','Rad.'].map(h=>html`<th key=${h} className="font-normal py-3 px-3 text-right">${h}</th>`)}
+    <${Head} title="Histórico de mediciones" sub=${rows.length+' mediciones · temperatura promedio '+nf(avg,1)+' °C'}/>
+    <div className="overflow-x-auto mt-5">
+      <table className="w-full min-w-[680px] text-[17px]">
+        <thead><tr className="text-left border-b border-[#E5E5E5]">
+          <th className=${th+'px-3'}>ID</th><th className=${th+'px-3'}>Fecha</th><th className=${th+'px-3'}>Ubicación</th>
+          ${['Temp.','Humedad','Precip.','Viento','Rad.'].map(h=>html`<th key=${h} className=${th+'px-3 text-right'}>${h}</th>`)}
         </tr></thead>
-        <tbody>
-          ${rows.map((r,i)=>html`<tr key=${r.id} className=${(i?'border-t border-[#EFEEEA] ':'')+'hover:bg-[#FAF9F6]'}>
-            <td className="py-3.5 pr-4 text-[#71717A]">${r.id}</td>
-            <td className="py-3.5 pr-4 whitespace-nowrap">${r.date}</td>
-            <td className="py-3.5 pr-4 whitespace-nowrap">${r.loc}</td>
-            <td className="py-3 px-3 text-right"><span className=${'inline-block px-2.5 py-0.5 rounded-full text-[14px] '+tempTone(r.temp)}>${nf(r.temp,1)} °C</span></td>
-            <td className="py-3.5 px-3 text-right whitespace-nowrap"><span className="inline-block align-middle w-10 h-1.5 rounded-full bg-[#ECEAE6] mr-2 overflow-hidden"><span className="block h-1.5 bg-[#7FA3A0]" style=${{width:r.hum+'%'}}></span></span>${r.hum} %</td>
-            <td className="py-3.5 px-3 text-right whitespace-nowrap">${nf(r.rain,1)} mm</td>
-            <td className="py-3.5 px-3 text-right whitespace-nowrap">${nf(r.wind,1)} m/s</td>
-            <td className="py-3.5 px-3 text-right text-[#A1A1AA]">—</td>
-          </tr>`)}
-        </tbody>
+        <tbody>${rows.map((r,i)=>html`<tr key=${r.id} className=${i?'border-t border-[#E5E5E5]':''}>
+          <td className="py-3.5 px-3">${r.id}</td>
+          <td className="py-3.5 px-3 whitespace-nowrap">${r.date}</td>
+          <td className="py-3.5 px-3 whitespace-nowrap">${r.loc}</td>
+          <td className="py-3.5 px-3 text-right whitespace-nowrap">${nf(r.temp,1)} °C</td>
+          <td className="py-3.5 px-3 text-right whitespace-nowrap">${r.hum} %</td>
+          <td className="py-3.5 px-3 text-right whitespace-nowrap">${nf(r.rain,1)} mm</td>
+          <td className="py-3.5 px-3 text-right whitespace-nowrap">${nf(r.wind,1)} m/s</td>
+          <td className="py-3.5 px-3 text-right text-[#A1A1AA]">—</td>
+        </tr>`)}</tbody>
       </table>
     </div>
   <//>`;
 }
 
 function Unidades(){
-  const [mode,setMode]=useState('c2f');
-  const [v,setV]=useState('25');
-  const n=parseFloat(String(v).replace(',','.'));
-  const ok=!isNaN(n);
-  const out=ok?(mode==='c2f'?n*9/5+32:(n-32)*5/9):null;
-  const c=ok?(mode==='c2f'?n:out):null;
-  const pos=ok?Math.max(0,Math.min(100,(c+10)/55*100)):null;
-  const B=(on)=>'text-[15px] px-4 py-2 rounded-xl '+(on?'bg-[#111] text-white':'bg-[#F4F4F2] text-[#18181B]');
+  const [v,setV]=useState('');
+  const [out,setOut]=useState(null);
+  const conv=(mode)=>{const n=parseFloat(String(v).replace(',','.'));
+    if(isNaN(n)){setOut('Ingresá una temperatura.');return}
+    setOut(mode==='c2f'?nf(n,1)+' °C = '+nf(n*9/5+32,1)+' °F':nf(n,1)+' °F = '+nf((n-32)*5/9,1)+' °C')};
+  const btn='h-11 px-4 rounded-xl bg-[#F4F4F2] text-[17px] active:bg-[#E9E9E6]';
   return html`<${Card}>
-    <${CardHead} title="Unidades de medida" sub="Conversión entre Celsius y Fahrenheit."/>
-    <input aria-label="Temperatura" inputMode="decimal" placeholder="Temperatura" value=${v} onChange=${e=>setV(e.target.value)} className="w-full h-12 px-4 mt-5 rounded-xl border border-[#E5E5E3] bg-white text-[16px] placeholder-[#A1A1AA]"/>
-    <div className="flex flex-wrap gap-2.5 mt-4">
-      <button type="button" className=${B(mode==='c2f')} onClick=${()=>setMode('c2f')}>Celsius a Fahrenheit</button>
-      <button type="button" className=${B(mode==='f2c')} onClick=${()=>setMode('f2c')}>Fahrenheit a Celsius</button>
+    <${Head} title="Unidades de medida" sub="Conversión entre Celsius y Fahrenheit."/>
+    <input aria-label="Temperatura" inputMode="decimal" placeholder="Temperatura" value=${v} onChange=${e=>setV(e.target.value)} className="w-full h-12 px-4 mt-5 rounded-xl border border-[#E5E5E5] bg-white text-[17px] placeholder-[#8A8A8A]"/>
+    <div className="flex flex-wrap gap-3 mt-4">
+      <button type="button" className=${btn} onClick=${()=>conv('c2f')}>Celsius a Fahrenheit</button>
+      <button type="button" className=${btn} onClick=${()=>conv('f2c')}>Fahrenheit a Celsius</button>
     </div>
-    <div className="mt-5 rounded-2xl border border-[#EFE9E4] p-4" style=${{background:'linear-gradient(120deg,#FFFDFB,#F7F3EE)'}}>
-      ${ok?html`<div className="flex flex-wrap items-baseline gap-x-3">
-        <span className="text-[34px] leading-none tracking-tight">${nf(out,1)} ${mode==='c2f'?'°F':'°C'}</span>
-        <span className="text-[15px] text-[#71717A]">${nf(n,1)} ${mode==='c2f'?'°C':'°F'} · ${mode==='c2f'?'(°C × 9/5) + 32':'(°F − 32) × 5/9'}</span></div>
-        <div className="relative h-2 rounded-full mt-5" style=${{background:'linear-gradient(90deg,#B7C7D3,#9DBBAA 40%,#EBC9A4 65%,#E08A66)'}}>
-          <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-white border-2 border-[#111]" style=${{left:pos+'%',transition:'left .3s ease'}}></div></div>
-        <div className="flex justify-between text-[12.5px] text-[#A1A1AA] mt-2"><span>−10 °C</span><span>45 °C</span></div>`
-      :html`<p className="text-[15px] text-[#71717A]">Ingresá una temperatura para ver la conversión.</p>`}
-    </div>
+    ${out?html`<p aria-live="polite" className="text-[18px] mt-4">${out}</p>`:null}
   <//>`;
 }
 
@@ -194,17 +166,15 @@ function App(){
   const [rows,setRows]=useState(INIT_HIST);
   const onSaved=(r)=>setRows(prev=>[{id:Math.max(...prev.map(x=>x.id))+1,date:r.saved,loc:r.name,temp:r.temp,hum:r.hum,rain:r.rain,wind:r.wind},...prev]);
   return html`<main className="mx-auto w-full max-w-[980px] px-4 sm:px-6 py-10 flex flex-col gap-5">
-    <header className="mb-2 flex flex-wrap items-end justify-between gap-3">
-      <div>
-        <h1 className="text-[30px] sm:text-[36px] font-semibold leading-tight tracking-tight">Climatic Registry for Enterprises</h1>
-        <p className="text-[17px] text-[#71717A] mt-1">Registro y monitoreo de datos climáticos</p>
-      </div>
-      <span className="text-[13px] text-[#71717A] border border-[#E5E5E3] rounded-full px-3 py-1">Fuente: OpenWeatherMap</span>
+    <header className="mb-2">
+      <h1 className="text-[32px] sm:text-[38px] font-bold leading-tight">Climatic Registry for Enterprises</h1>
+      <p className="text-[18px] text-[#6B6B6B] mt-1">Registro y monitoreo de datos climáticos</p>
     </header>
+    <${Banner}/>
     <${Consulta} onSaved=${onSaved}/>
     <${Historico} rows=${rows}/>
     <${Unidades}/>
-    <footer className="text-center text-[13px] text-[#A1A1AA] pt-2 pb-6">CRFE © 2026 Bruno Vaccaro</footer>
+    <footer className="text-center text-[14px] text-[#6B6B6B] pt-2 pb-6 leading-relaxed"><p>CRFE © 2026 Bruno Vaccaro. Todos los derechos reservados.</p><p>Datos de <a href="https://openweathermap.org/" target="_blank" rel="noopener" className="underline underline-offset-2 hover:text-[#111]">OpenWeatherMap</a></p></footer>
   </main>`;
 }
 ReactDOM.createRoot(document.getElementById('root')).render(html`<${App}/>`);
